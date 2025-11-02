@@ -10,23 +10,33 @@ function createGameId() {
   return `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
-function getLineIndices(board, gridSize, start, step, symbol) {
-  const indices = []
+// Check for 3 consecutive matching symbols (XOX requirement)
+function getConsecutiveLineIndices(board, gridSize, start, step, symbol, requiredLength = 3) {
+  let currentSequence = []
+  
+  // Check the entire line and find consecutive sequences
   for (let i = 0; i < gridSize; i++) {
     const index = start + step * i
-    // Make sure index is within bounds
     if (index >= 0 && index < board.length) {
       if (board[index] === symbol) {
-        indices.push(index)
+        currentSequence.push(index)
+        // If we found enough consecutive symbols, return them
+        if (currentSequence.length >= requiredLength) {
+          return currentSequence.slice(0, requiredLength) // Return exactly requiredLength
+        }
       } else {
-        // If any cell doesn't match, we can't have a complete line
-        // But we continue to check all cells for debugging
+        // Reset if we find a non-matching cell (break in sequence)
+        currentSequence = []
       }
     }
   }
-  // Return indices only if all cells in the line match
-  const isComplete = indices.length === gridSize
-  return isComplete ? indices : []
+  
+  return []
+}
+
+// Legacy function kept for compatibility (checks entire line)
+function getLineIndices(board, gridSize, start, step, symbol) {
+  return getConsecutiveLineIndices(board, gridSize, start, step, symbol, gridSize)
 }
 
 function checkWin(board, gridSize, symbol, lastIndex) {
@@ -36,54 +46,51 @@ function checkWin(board, gridSize, symbol, lastIndex) {
 
   console.log(`\n🔎 Checking win for symbol '${symbol}' at position (${row}, ${col}) = index ${lastIndex}`)
 
-  // Check horizontal - check the row containing the last move
+  // Check for 3 consecutive symbols (XOX requirement) in each direction
+  const requiredLength = 3
+
+  // Check horizontal - check the row containing the last move for 3 consecutive
   const horizontalStart = row * gridSize
-  const horizontalIndices = getLineIndices(board, gridSize, horizontalStart, 1, symbol)
+  const horizontalIndices = getConsecutiveLineIndices(board, gridSize, horizontalStart, 1, symbol, requiredLength)
   console.log(`   Horizontal row ${row}: checking indices ${horizontalStart} to ${horizontalStart + gridSize - 1}`)
   console.log(`   Horizontal indices found:`, horizontalIndices)
-  if (horizontalIndices.length === gridSize) {
-    console.log(`   ✅ HORIZONTAL WIN detected in row ${row}`)
-    winningLines.push({ type: 'horizontal', indices: horizontalIndices })
+  if (horizontalIndices.length >= requiredLength) {
+    console.log(`   ✅ HORIZONTAL WIN detected in row ${row} with ${horizontalIndices.length} consecutive`)
+    // Only take the first 3 consecutive indices
+    winningLines.push({ type: 'horizontal', indices: horizontalIndices.slice(0, requiredLength) })
   }
 
-  // Check vertical - check the column containing the last move
+  // Check vertical - check the column containing the last move for 3 consecutive
   const verticalStart = col
-  const verticalIndices = getLineIndices(board, gridSize, verticalStart, gridSize, symbol)
+  const verticalIndices = getConsecutiveLineIndices(board, gridSize, verticalStart, gridSize, symbol, requiredLength)
   console.log(`   Vertical col ${col}: checking indices`, Array.from({ length: gridSize }, (_, i) => verticalStart + i * gridSize))
   console.log(`   Vertical indices found:`, verticalIndices)
-  if (verticalIndices.length === gridSize) {
-    console.log(`   ✅ VERTICAL WIN detected in column ${col}`)
-    winningLines.push({ type: 'vertical', indices: verticalIndices })
+  if (verticalIndices.length >= requiredLength) {
+    console.log(`   ✅ VERTICAL WIN detected in column ${col} with ${verticalIndices.length} consecutive`)
+    winningLines.push({ type: 'vertical', indices: verticalIndices.slice(0, requiredLength) })
   }
 
-  // Check main diagonal (top-left to bottom-right) - only if last move is on this diagonal
-  if (row === col) {
-    const diagonalMainStart = 0
-    const diagonalMainStep = gridSize + 1
-    const diagonalMainIndices = getLineIndices(board, gridSize, diagonalMainStart, diagonalMainStep, symbol)
-    console.log(`   Main diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalMainStart + i * diagonalMainStep))
-    console.log(`   Main diagonal indices found:`, diagonalMainIndices)
-    if (diagonalMainIndices.length === gridSize) {
-      console.log(`   ✅ MAIN DIAGONAL WIN detected`)
-      winningLines.push({ type: 'diagonal-main', indices: diagonalMainIndices })
-    }
-  } else {
-    console.log(`   Main diagonal: skipped (row ${row} !== col ${col})`)
+  // Check main diagonal (top-left to bottom-right) - check if last move is on or near this diagonal
+  // Check if there are 3 consecutive on the main diagonal
+  const diagonalMainStart = 0
+  const diagonalMainStep = gridSize + 1
+  const diagonalMainIndices = getConsecutiveLineIndices(board, gridSize, diagonalMainStart, diagonalMainStep, symbol, requiredLength)
+  console.log(`   Main diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalMainStart + i * diagonalMainStep))
+  console.log(`   Main diagonal indices found:`, diagonalMainIndices)
+  if (diagonalMainIndices.length >= requiredLength) {
+    console.log(`   ✅ MAIN DIAGONAL WIN detected with ${diagonalMainIndices.length} consecutive`)
+    winningLines.push({ type: 'diagonal-main', indices: diagonalMainIndices.slice(0, requiredLength) })
   }
 
-  // Check anti-diagonal (top-right to bottom-left) - only if last move is on this diagonal
-  if (row + col === gridSize - 1) {
-    const diagonalAntiStart = gridSize - 1
-    const diagonalAntiStep = gridSize - 1
-    const diagonalAntiIndices = getLineIndices(board, gridSize, diagonalAntiStart, diagonalAntiStep, symbol)
-    console.log(`   Anti-diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalAntiStart + i * diagonalAntiStep))
-    console.log(`   Anti-diagonal indices found:`, diagonalAntiIndices)
-    if (diagonalAntiIndices.length === gridSize) {
-      console.log(`   ✅ ANTI-DIAGONAL WIN detected`)
-      winningLines.push({ type: 'diagonal-anti', indices: diagonalAntiIndices })
-    }
-  } else {
-    console.log(`   Anti-diagonal: skipped (row ${row} + col ${col} = ${row + col} !== ${gridSize - 1})`)
+  // Check anti-diagonal (top-right to bottom-left) - check if there are 3 consecutive
+  const diagonalAntiStart = gridSize - 1
+  const diagonalAntiStep = gridSize - 1
+  const diagonalAntiIndices = getConsecutiveLineIndices(board, gridSize, diagonalAntiStart, diagonalAntiStep, symbol, requiredLength)
+  console.log(`   Anti-diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalAntiStart + i * diagonalAntiStep))
+  console.log(`   Anti-diagonal indices found:`, diagonalAntiIndices)
+  if (diagonalAntiIndices.length >= requiredLength) {
+    console.log(`   ✅ ANTI-DIAGONAL WIN detected with ${diagonalAntiIndices.length} consecutive`)
+    winningLines.push({ type: 'diagonal-anti', indices: diagonalAntiIndices.slice(0, requiredLength) })
   }
 
   console.log(`   Total winning lines found: ${winningLines.length}`)
