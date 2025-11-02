@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: xox-socket-server
+    env: node
+    buildCommand: npm install socket.io --save
+    startCommand: node socket-server.js
+    envVars:
+      - key: CLIENT_URL
+        sync: false
+      - key: PORT
+        fromService:
+          type: web
+          name: xox-socket-server
+          property: port
+

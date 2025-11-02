@@ -5,7 +5,7 @@
   "main": "socket-server.js",
   "scripts": {
     "start": "node socket-server.js",
-    "dev": "node socket-server.js"
+    "install": "npm install socket.io --save"
   },
   "dependencies": {
     "socket.io": "^4.5.4"
@@ -14,3 +14,4 @@
     "node": ">=14.0.0"
   }
 }
+

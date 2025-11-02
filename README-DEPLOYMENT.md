@@ -42,13 +42,27 @@ Since Vercel uses serverless functions which don't support WebSocket connections
    - Connect your GitHub repo
 
 2. **Configure the service:**
-   - Build Command: Leave empty (or `npm install`)
-   - Start Command: `node socket-server.js`
-   - Environment Variables:
-     - `CLIENT_URL`: Your Vercel URL
-     - `NODE_ENV`: `production`
+   - **Name**: `xox-socket-server`
+   - **Root Directory**: Leave empty (or set to `/` if needed)
+   - **Environment**: `Node`
+   - **Build Command**: `npm install --prefix . socket.io` (OR use the render.yaml file)
+   - **Start Command**: `node socket-server.js`
+   - **Environment Variables**:
+     - `CLIENT_URL`: Your Vercel URL (e.g., `https://xox-game-roan.vercel.app`)
+     - `NODE_ENV`: `production` (optional)
 
-3. **Get your Socket Server URL and add to Vercel** (same as Railway steps above)
+3. **Alternative: Use render.yaml** (Recommended):
+   - The repository includes a `render.yaml` file
+   - In Render dashboard, go to "New +" → "Blueprint"
+   - Connect your repo and Render will auto-configure using the YAML file
+   - Just add the `CLIENT_URL` environment variable manually
+
+4. **Get your Socket Server URL and add to Vercel** (same as Railway steps above)
+
+**Note**: If you get build errors about Next.js dependencies, make sure:
+- Build Command is set to `npm install --prefix . socket.io` OR just `npm install socket.io`
+- Start Command is `node socket-server.js`
+- Render should NOT try to build Next.js (the Socket server doesn't need it)
 
 ### Option 3: Deploy Socket Server to Heroku
 

@@ -37,15 +37,24 @@ Vercel uses serverless functions which don't support WebSocket connections. You 
 
 ## Alternative: Render.com (Free)
 
+**IMPORTANT**: If you get build errors about Next.js, follow these EXACT steps:
+
 1. Go to [render.com](https://render.com) and sign up
 2. Click "New +" → "Web Service"
 3. Connect your GitHub repo
-4. Configure:
+4. Configure with these EXACT settings:
    - **Name**: `xox-socket-server`
+   - **Environment**: `Node`
+   - **Build Command**: `npm install socket.io --save` ⚠️ **This is critical!**
    - **Start Command**: `node socket-server.js`
    - **Environment Variables**:
      - `CLIENT_URL` = `https://xox-game-roan.vercel.app`
 5. Copy the Render URL and add it to Vercel as `NEXT_PUBLIC_SOCKET_URL`
+
+**If you already created the service and it's failing:**
+- Go to your Render service → Settings
+- Update the **Build Command** to: `npm install socket.io --save`
+- Click "Save Changes" → It will redeploy automatically
 
 ## Important Files
 
