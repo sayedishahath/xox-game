@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function GameBoard({ gridSize, playerId, socket, currentPlayer, players, scores, gameStatus: externalGameStatus }) {
+export default function GameBoard({ gridSize, playerId, socket, currentPlayer, players, scores = {}, gameStatus: externalGameStatus }) {
   const [board, setBoard] = useState(Array(gridSize * gridSize).fill(null))
   const [yourSymbol, setYourSymbol] = useState(null)
   const [gameStatus, setGameStatus] = useState(externalGameStatus || 'waiting')
@@ -14,6 +14,11 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       setGameStatus(externalGameStatus)
     }
   }, [externalGameStatus])
+
+  // Debug: Log when scores change
+  useEffect(() => {
+    console.log('Scores prop updated in GameBoard:', scores)
+  }, [scores])
 
   useEffect(() => {
     setCurrentPlayerState(currentPlayer)
@@ -37,6 +42,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
         setBoard(result.board)
         setCurrentPlayerState(result.currentPlayer)
         setGameStatus(result.status)
+        // Note: Scores are updated via props from parent (game.js)
       }
     })
 

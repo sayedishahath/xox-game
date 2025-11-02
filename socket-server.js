@@ -183,6 +183,7 @@ io.on('connection', (socket) => {
       }
 
       // Emit score update
+      console.log(`Score update: Player ${playerId} scored ${winningLines.length} point(s) for ${winningLines.join(', ')}. New scores:`, game.scores)
       io.to(game.id).emit('scoreUpdate', {
         scores: game.scores,
         playerId,
@@ -199,6 +200,7 @@ io.on('connection', (socket) => {
       board: game.board,
       currentPlayer: game.currentPlayer,
       status: game.status,
+      scores: game.scores, // Include scores in moveResult too
     })
 
     io.to(game.id).emit('gameUpdate', {
@@ -207,6 +209,9 @@ io.on('connection', (socket) => {
       scores: game.scores,
       status: game.status,
     })
+
+    // Log for debugging
+    console.log(`Move by ${playerId}: Scores updated:`, game.scores)
   })
 
   socket.on('disconnect', () => {

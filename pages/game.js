@@ -92,9 +92,12 @@ export default function Game() {
     })
 
     newSocket.on('gameUpdate', (gameData) => {
+      console.log('Game update received:', gameData)
       setPlayers(gameData.players)
       setCurrentPlayer(gameData.currentPlayer)
-      setScores(gameData.scores || {})
+      if (gameData.scores) {
+        setScores(gameData.scores)
+      }
       setGameStatus(gameData.status || 'waiting')
     })
 
@@ -103,6 +106,7 @@ export default function Game() {
     })
 
     newSocket.on('scoreUpdate', (scoreData) => {
+      console.log('Score update received:', scoreData)
       setScores(scoreData.scores)
     })
 
