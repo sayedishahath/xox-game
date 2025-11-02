@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function GameBoard({ gridSize, playerId, socket, currentPlayer, players, scores }) {
+export default function GameBoard({ gridSize, playerId, socket, currentPlayer, players, scores, gameStatus: externalGameStatus }) {
   const [board, setBoard] = useState(Array(gridSize * gridSize).fill(null))
   const [yourSymbol, setYourSymbol] = useState(null)
-  const [gameStatus, setGameStatus] = useState('waiting')
+  const [gameStatus, setGameStatus] = useState(externalGameStatus || 'waiting')
   const [currentPlayerState, setCurrentPlayerState] = useState(currentPlayer)
   const [scoreAnimation, setScoreAnimation] = useState({})
+
+  // Update game status when prop changes
+  useEffect(() => {
+    if (externalGameStatus) {
+      setGameStatus(externalGameStatus)
+    }
+  }, [externalGameStatus])
 
   useEffect(() => {
     setCurrentPlayerState(currentPlayer)
@@ -49,12 +56,27 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       setGameStatus('waiting')
     })
 
+    // Also listen to playerJoined for status updates
+    socket.on('playerJoined', (gameData) => {
+      if (gameData.status) {
+        setGameStatus(gameData.status)
+      }
+    })
+
+    socket.on('gameUpdate', (gameData) => {
+      if (gameData.status) {
+        setGameStatus(gameData.status)
+      }
+    })
+
     return () => {
       socket.off('gameState')
       socket.off('playerSymbol')
       socket.off('moveResult')
       socket.off('scoreUpdate')
       socket.off('playerLeft')
+      socket.off('playerJoined')
+      socket.off('gameUpdate')
     }
   }, [socket])
 

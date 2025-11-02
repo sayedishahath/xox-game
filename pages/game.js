@@ -15,6 +15,7 @@ export default function Game() {
   const [gridSize, setGridSize] = useState(3)
   const [isConnecting, setIsConnecting] = useState(true)
   const [connectionError, setConnectionError] = useState(null)
+  const [gameStatus, setGameStatus] = useState('waiting')
 
   useEffect(() => {
     if (!size || !player) return
@@ -83,15 +84,22 @@ export default function Game() {
     })
 
     newSocket.on('playerJoined', (gameData) => {
+      console.log('Player joined event:', gameData)
       setPlayers(gameData.players)
       setCurrentPlayer(gameData.currentPlayer)
       setScores(gameData.scores || {})
+      setGameStatus(gameData.status || 'waiting')
     })
 
     newSocket.on('gameUpdate', (gameData) => {
       setPlayers(gameData.players)
       setCurrentPlayer(gameData.currentPlayer)
       setScores(gameData.scores || {})
+      setGameStatus(gameData.status || 'waiting')
+    })
+
+    newSocket.on('gameState', (gameData) => {
+      setGameStatus(gameData.status || 'waiting')
     })
 
     newSocket.on('scoreUpdate', (scoreData) => {
@@ -197,6 +205,7 @@ export default function Game() {
                 currentPlayer={currentPlayer}
                 players={players}
                 scores={scores}
+                gameStatus={gameStatus}
               />
             </motion.div>
           ) : (
