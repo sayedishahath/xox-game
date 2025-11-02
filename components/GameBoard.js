@@ -9,6 +9,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
   const [scoreAnimation, setScoreAnimation] = useState({})
   const [winningIndices, setWinningIndices] = useState([])
   const [strikedCells, setStrikedCells] = useState(new Set())
+  const [permanentStrikes, setPermanentStrikes] = useState(new Set()) // Keep track of permanently struck cells
 
   // Update game status when prop changes
   useEffect(() => {
@@ -47,17 +48,18 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
         setGameStatus(result.status)
         // Note: Scores are updated via props from parent (game.js)
         
-        // Handle winning line animation
+        // Handle winning line animation - mark as permanently struck
         if (result.winningIndices && result.winningIndices.length > 0) {
           console.log('🎯 Winning indices in moveResult:', result.winningIndices)
-          setWinningIndices(result.winningIndices)
+          setWinningIndices([...result.winningIndices])
           setStrikedCells(new Set(result.winningIndices))
           
-          // Clear strike animation after 2 seconds
-          setTimeout(() => {
-            setWinningIndices([])
-            setStrikedCells(new Set())
-          }, 2000)
+          // Add to permanent strikes (cells stay struck forever)
+          setPermanentStrikes(prev => {
+            const newSet = new Set(prev)
+            result.winningIndices.forEach(idx => newSet.add(idx))
+            return newSet
+          })
         }
       }
     })
@@ -67,18 +69,18 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       console.log('   Winning indices:', scoreData.winningIndices)
       console.log('   Scores:', scoreData.scores)
       
-      // Handle winning line animation FIRST (before score animation)
+      // Handle winning line animation - mark as permanently struck
       if (scoreData.winningIndices && scoreData.winningIndices.length > 0) {
         console.log('✨ Setting winning indices for strike animation:', scoreData.winningIndices)
         setWinningIndices([...scoreData.winningIndices])
         setStrikedCells(new Set(scoreData.winningIndices))
         
-        // Clear strike animation after 2.5 seconds
-        setTimeout(() => {
-          console.log('🧹 Clearing strike animation')
-          setWinningIndices([])
-          setStrikedCells(new Set())
-        }, 2500)
+        // Add to permanent strikes (cells stay struck forever)
+        setPermanentStrikes(prev => {
+          const newSet = new Set(prev)
+          scoreData.winningIndices.forEach(idx => newSet.add(idx))
+          return newSet
+        })
       }
       
       // Trigger score animation
@@ -93,12 +95,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       }
     })
     
-    socket.on('boardUpdate', (data) => {
-      // Board was cleared after animation
-      setBoard(data.board)
-      setWinningIndices([])
-      setStrikedCells(new Set())
-    })
+    // Removed boardUpdate listener - cells are no longer cleared
 
     socket.on('playerLeft', (data) => {
       setGameStatus('waiting')
@@ -125,7 +122,6 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       socket.off('playerLeft')
       socket.off('playerJoined')
       socket.off('gameUpdate')
-      socket.off('boardUpdate')
     }
   }, [socket])
 
@@ -139,34 +135,42 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
   const getCellColor = (cell, index) => {
     if (!cell) return 'bg-white hover:bg-gray-50'
     
-    const isStriked = strikedCells.has(index)
-    const isWinning = winningIndices.includes(index)
+    const isPermanentlyStruck = permanentStrikes.has(index)
+    const isCurrentlyWinning = winningIndices.includes(index) || strikedCells.has(index)
+    const isStruck = isPermanentlyStruck || isCurrentlyWinning
     
     if (cell === yourSymbol) {
       // Your symbol (X) - red
-      if (isWinning) {
-        return 'bg-gradient-to-br from-red-300 to-red-400 border-red-500 ring-4 ring-yellow-400'
+      if (isStruck) {
+        return 'bg-gradient-to-br from-red-200 to-red-300 border-red-400'
       }
       return 'bg-gradient-to-br from-red-100 to-red-200 border-red-400'
     } else {
       // Opponent's symbol (O) - green
-      if (isWinning) {
-        return 'bg-gradient-to-br from-green-300 to-green-400 border-green-500 ring-4 ring-yellow-400'
+      if (isStruck) {
+        return 'bg-gradient-to-br from-green-200 to-green-300 border-green-400'
       }
       return 'bg-gradient-to-br from-green-100 to-green-200 border-green-400'
     }
   }
   
   const getStrikeOverlay = () => {
-    if (winningIndices.length === 0) {
-      console.log('No winning indices, no strike overlay')
+    // Show strike for permanently struck cells (they stay visible forever)
+    const allStruckIndices = Array.from(permanentStrikes)
+    if (allStruckIndices.length === 0 && winningIndices.length === 0) {
       return null
     }
     
-    console.log('🎨 Creating strike overlay for indices:', winningIndices)
+    // Use current winning indices if available, otherwise use permanent strikes
+    const indicesToUse = winningIndices.length >= 3 ? winningIndices : 
+                         (allStruckIndices.length >= 3 ? Array.from(allStruckIndices).slice(0, 3) : [])
+    
+    if (indicesToUse.length < 3) return null
+    
+    console.log('🎨 Creating strike overlay for indices:', indicesToUse)
     
     // Sort indices to get first and last
-    const sortedIndices = [...winningIndices].sort((a, b) => a - b)
+    const sortedIndices = [...indicesToUse].sort((a, b) => a - b)
     const firstIndex = sortedIndices[0]
     const lastIndex = sortedIndices[sortedIndices.length - 1]
     
@@ -227,7 +231,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
     
     return (
       <motion.div
-        key={`strike-${winningIndices.join('-')}`}
+        key={`strike-${indicesToUse.join('-')}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -251,9 +255,10 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            style={{ 
+            style={{
               filter: 'drop-shadow(0 0 6px rgba(251, 191, 36, 1))',
-              strokeWidth: '4'
+              strokeWidth: '4',
+              pathLength: 1 // Keep line visible permanently after animation
             }}
           />
         </svg>
@@ -402,7 +407,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
                 key={index}
                 variants={cellVariants}
                 initial="initial"
-                animate={winningIndices.includes(index) ? { scale: [1, 1.2, 1] } : "animate"}
+                animate={(winningIndices.includes(index) || permanentStrikes.has(index)) ? { scale: [1, 1.2, 1] } : "animate"}
                 whileHover={
                   !cell && currentPlayerState === playerId && gameStatus === 'playing'
                     ? { scale: 1.1, rotate: 2 }
@@ -414,7 +419,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
                     : {}
                 }
                 onClick={() => handleCellClick(index)}
-                disabled={!!cell || currentPlayerState !== playerId || gameStatus !== 'playing'}
+                disabled={!!cell || currentPlayerState !== playerId || gameStatus !== 'playing' || permanentStrikes.has(index)}
                 className={`
                   ${getCellColor(cell, index)}
                   aspect-square flex items-center justify-center
@@ -432,13 +437,13 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
                 {cell && (
                   <motion.span
                     initial={{ scale: 0, rotate: -180 }}
-                    animate={winningIndices.includes(index) ? { 
+                    animate={(winningIndices.includes(index) || permanentStrikes.has(index)) ? { 
                       scale: [1, 1.3, 1], 
                       rotate: [0, 360],
                       filter: ["brightness(1)", "brightness(1.5)", "brightness(1)"]
                     } : { scale: 1, rotate: 0 }}
                     transition={{ 
-                      type: winningIndices.includes(index) ? "spring" : "spring",
+                      type: (winningIndices.includes(index) || permanentStrikes.has(index)) ? "spring" : "spring",
                       stiffness: 300, 
                       damping: 20 
                     }}

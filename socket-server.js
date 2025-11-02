@@ -10,90 +10,107 @@ function createGameId() {
   return `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
-// Check for 3 consecutive matching symbols (XOX requirement)
-function getConsecutiveLineIndices(board, gridSize, start, step, symbol, requiredLength = 3) {
-  let currentSequence = []
+// Check for X-O-X or O-X-O pattern (alternating pattern)
+function checkXOXPattern(board, gridSize, start, step) {
+  const pattern = []
   
-  // Check the entire line and find consecutive sequences
+  // Check the entire line for X-O-X or O-X-O pattern
   for (let i = 0; i < gridSize; i++) {
     const index = start + step * i
     if (index >= 0 && index < board.length) {
-      if (board[index] === symbol) {
-        currentSequence.push(index)
-        // If we found enough consecutive symbols, return them
-        if (currentSequence.length >= requiredLength) {
-          return currentSequence.slice(0, requiredLength) // Return exactly requiredLength
-        }
-      } else {
-        // Reset if we find a non-matching cell (break in sequence)
-        currentSequence = []
+      pattern.push({ index, symbol: board[index] })
+    }
+  }
+  
+  // Check for X-O-X pattern (alternating starting with X)
+  for (let i = 0; i <= pattern.length - 3; i++) {
+    const three = pattern.slice(i, i + 3)
+    if (three[0].symbol === 'X' && three[1].symbol === 'O' && three[2].symbol === 'X') {
+      return {
+        type: 'XOX',
+        indices: three.map(cell => cell.index),
+        completingSymbol: 'X' // Last X completes the pattern
       }
     }
   }
   
-  return []
-}
-
-// Legacy function kept for compatibility (checks entire line)
-function getLineIndices(board, gridSize, start, step, symbol) {
-  return getConsecutiveLineIndices(board, gridSize, start, step, symbol, gridSize)
+  // Check for O-X-O pattern (alternating starting with O)
+  for (let i = 0; i <= pattern.length - 3; i++) {
+    const three = pattern.slice(i, i + 3)
+    if (three[0].symbol === 'O' && three[1].symbol === 'X' && three[2].symbol === 'O') {
+      return {
+        type: 'OXO',
+        indices: three.map(cell => cell.index),
+        completingSymbol: 'O' // Last O completes the pattern
+      }
+    }
+  }
+  
+  return null
 }
 
 function checkWin(board, gridSize, symbol, lastIndex) {
   const row = Math.floor(lastIndex / gridSize)
   const col = lastIndex % gridSize
-  const winningLines = [] // Array of {type, indices}
+  const winningLines = [] // Array of {type, indices, completingSymbol}
 
-  console.log(`\n🔎 Checking win for symbol '${symbol}' at position (${row}, ${col}) = index ${lastIndex}`)
+  console.log(`\n🔎 Checking XOX pattern for symbol '${symbol}' at position (${row}, ${col}) = index ${lastIndex}`)
 
-  // Check for 3 consecutive symbols (XOX requirement) in each direction
-  const requiredLength = 3
-
-  // Check horizontal - check the row containing the last move for 3 consecutive
+  // Check horizontal - check the row containing the last move
   const horizontalStart = row * gridSize
-  const horizontalIndices = getConsecutiveLineIndices(board, gridSize, horizontalStart, 1, symbol, requiredLength)
+  const horizontalPattern = checkXOXPattern(board, gridSize, horizontalStart, 1)
   console.log(`   Horizontal row ${row}: checking indices ${horizontalStart} to ${horizontalStart + gridSize - 1}`)
-  console.log(`   Horizontal indices found:`, horizontalIndices)
-  if (horizontalIndices.length >= requiredLength) {
-    console.log(`   ✅ HORIZONTAL WIN detected in row ${row} with ${horizontalIndices.length} consecutive`)
-    // Only take the first 3 consecutive indices
-    winningLines.push({ type: 'horizontal', indices: horizontalIndices.slice(0, requiredLength) })
+  if (horizontalPattern && horizontalPattern.completingSymbol === symbol) {
+    console.log(`   ✅ HORIZONTAL XOX pattern detected: ${horizontalPattern.type}`)
+    winningLines.push({ 
+      type: 'horizontal', 
+      indices: horizontalPattern.indices,
+      patternType: horizontalPattern.type
+    })
   }
 
-  // Check vertical - check the column containing the last move for 3 consecutive
+  // Check vertical - check the column containing the last move
   const verticalStart = col
-  const verticalIndices = getConsecutiveLineIndices(board, gridSize, verticalStart, gridSize, symbol, requiredLength)
+  const verticalPattern = checkXOXPattern(board, gridSize, verticalStart, gridSize)
   console.log(`   Vertical col ${col}: checking indices`, Array.from({ length: gridSize }, (_, i) => verticalStart + i * gridSize))
-  console.log(`   Vertical indices found:`, verticalIndices)
-  if (verticalIndices.length >= requiredLength) {
-    console.log(`   ✅ VERTICAL WIN detected in column ${col} with ${verticalIndices.length} consecutive`)
-    winningLines.push({ type: 'vertical', indices: verticalIndices.slice(0, requiredLength) })
+  if (verticalPattern && verticalPattern.completingSymbol === symbol) {
+    console.log(`   ✅ VERTICAL XOX pattern detected: ${verticalPattern.type}`)
+    winningLines.push({ 
+      type: 'vertical', 
+      indices: verticalPattern.indices,
+      patternType: verticalPattern.type
+    })
   }
 
-  // Check main diagonal (top-left to bottom-right) - check if last move is on or near this diagonal
-  // Check if there are 3 consecutive on the main diagonal
+  // Check main diagonal (top-left to bottom-right)
   const diagonalMainStart = 0
   const diagonalMainStep = gridSize + 1
-  const diagonalMainIndices = getConsecutiveLineIndices(board, gridSize, diagonalMainStart, diagonalMainStep, symbol, requiredLength)
+  const diagonalMainPattern = checkXOXPattern(board, gridSize, diagonalMainStart, diagonalMainStep)
   console.log(`   Main diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalMainStart + i * diagonalMainStep))
-  console.log(`   Main diagonal indices found:`, diagonalMainIndices)
-  if (diagonalMainIndices.length >= requiredLength) {
-    console.log(`   ✅ MAIN DIAGONAL WIN detected with ${diagonalMainIndices.length} consecutive`)
-    winningLines.push({ type: 'diagonal-main', indices: diagonalMainIndices.slice(0, requiredLength) })
+  if (diagonalMainPattern && diagonalMainPattern.completingSymbol === symbol) {
+    console.log(`   ✅ MAIN DIAGONAL XOX pattern detected: ${diagonalMainPattern.type}`)
+    winningLines.push({ 
+      type: 'diagonal-main', 
+      indices: diagonalMainPattern.indices,
+      patternType: diagonalMainPattern.type
+    })
   }
 
-  // Check anti-diagonal (top-right to bottom-left) - check if there are 3 consecutive
+  // Check anti-diagonal (top-right to bottom-left)
   const diagonalAntiStart = gridSize - 1
   const diagonalAntiStep = gridSize - 1
-  const diagonalAntiIndices = getConsecutiveLineIndices(board, gridSize, diagonalAntiStart, diagonalAntiStep, symbol, requiredLength)
+  const diagonalAntiPattern = checkXOXPattern(board, gridSize, diagonalAntiStart, diagonalAntiStep)
   console.log(`   Anti-diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalAntiStart + i * diagonalAntiStep))
-  console.log(`   Anti-diagonal indices found:`, diagonalAntiIndices)
-  if (diagonalAntiIndices.length >= requiredLength) {
-    console.log(`   ✅ ANTI-DIAGONAL WIN detected with ${diagonalAntiIndices.length} consecutive`)
-    winningLines.push({ type: 'diagonal-anti', indices: diagonalAntiIndices.slice(0, requiredLength) })
+  if (diagonalAntiPattern && diagonalAntiPattern.completingSymbol === symbol) {
+    console.log(`   ✅ ANTI-DIAGONAL XOX pattern detected: ${diagonalAntiPattern.type}`)
+    winningLines.push({ 
+      type: 'diagonal-anti', 
+      indices: diagonalAntiPattern.indices,
+      patternType: diagonalAntiPattern.type
+    })
   }
 
-  console.log(`   Total winning lines found: ${winningLines.length}`)
+  console.log(`   Total XOX patterns found: ${winningLines.length}`)
   return winningLines
 }
 
@@ -221,7 +238,7 @@ io.on('connection', (socket) => {
       console.log(`   Winning indices:`, allWinningIndices)
       console.log(`   All scores:`, JSON.stringify(game.scores))
       
-      // Emit score update with winning indices BEFORE clearing
+      // Emit score update with winning indices (cells stay on board)
       io.to(game.id).emit('scoreUpdate', {
         scores: { ...game.scores }, // Send a copy to ensure it's fresh
         playerId,
@@ -229,34 +246,17 @@ io.on('connection', (socket) => {
         winningIndices: [...allWinningIndices], // Send copy of array
       })
       
-      // Wait a bit before clearing to allow animation (we'll clear after animation)
-      // For now, clear immediately but send indices for client-side animation
-      
-      // Clear the winning lines (set to null) after a delay
-      setTimeout(() => {
-        winningLines.forEach(line => {
-          line.indices.forEach(cellIndex => {
-            game.board[cellIndex] = null
-          })
-        })
-        
-        // Emit updated board after clearing
-        io.to(game.id).emit('boardUpdate', {
-          board: game.board,
-        })
-      }, 2000) // 2 seconds for animation
+      // Note: Cells are NOT cleared - they remain on board with strike-through
     }
 
     // Switch turn
     game.currentPlayer = game.players.find((p) => p.id !== playerId).id
 
-    // Send updated game state (but don't clear board yet if there's a win - wait for animation)
-    const boardToSend = winningLines.length > 0 ? [...game.board] : game.board
-    
+    // Send updated game state (cells stay on board even after scoring)
     console.log(`\n📤 Emitting moveResult with scores:`, JSON.stringify(game.scores))
     io.to(game.id).emit('moveResult', {
       success: true,
-      board: boardToSend,
+      board: game.board, // Board stays as-is, cells are not cleared
       currentPlayer: game.currentPlayer,
       status: game.status,
       scores: { ...game.scores }, // Include scores in moveResult too (force copy)
