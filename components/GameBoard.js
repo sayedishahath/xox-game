@@ -61,27 +61,33 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
     })
 
     socket.on('scoreUpdate', (scoreData) => {
-      console.log('Score update in GameBoard:', scoreData)
+      console.log('🎯 Score update received in GameBoard:', scoreData)
+      console.log('   Winning indices:', scoreData.winningIndices)
+      console.log('   Scores:', scoreData.scores)
+      
+      // Handle winning line animation FIRST (before score animation)
+      if (scoreData.winningIndices && scoreData.winningIndices.length > 0) {
+        console.log('✨ Setting winning indices for strike animation:', scoreData.winningIndices)
+        setWinningIndices([...scoreData.winningIndices])
+        setStrikedCells(new Set(scoreData.winningIndices))
+        
+        // Clear strike animation after 2.5 seconds
+        setTimeout(() => {
+          console.log('🧹 Clearing strike animation')
+          setWinningIndices([])
+          setStrikedCells(new Set())
+        }, 2500)
+      }
+      
       // Trigger score animation
       if (scoreData.playerId) {
+        console.log('📊 Triggering score animation for player:', scoreData.playerId)
         setScoreAnimation({
           [scoreData.playerId]: true
         })
         setTimeout(() => {
           setScoreAnimation(prev => ({ ...prev, [scoreData.playerId]: false }))
         }, 1000)
-      }
-      
-      // Handle winning line animation
-      if (scoreData.winningIndices && scoreData.winningIndices.length > 0) {
-        setWinningIndices(scoreData.winningIndices)
-        setStrikedCells(new Set(scoreData.winningIndices))
-        
-        // Clear strike animation after 2 seconds
-        setTimeout(() => {
-          setWinningIndices([])
-          setStrikedCells(new Set())
-        }, 2000)
       }
     })
     
@@ -150,62 +156,103 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
   }
   
   const getStrikeOverlay = () => {
-    if (winningIndices.length === 0) return null
+    if (winningIndices.length === 0) {
+      console.log('No winning indices, no strike overlay')
+      return null
+    }
     
-    // Group indices by row/col to determine line type
-    const firstIndex = winningIndices[0]
-    const lastIndex = winningIndices[winningIndices.length - 1]
+    console.log('🎨 Creating strike overlay for indices:', winningIndices)
+    
+    // Sort indices to get first and last
+    const sortedIndices = [...winningIndices].sort((a, b) => a - b)
+    const firstIndex = sortedIndices[0]
+    const lastIndex = sortedIndices[sortedIndices.length - 1]
+    
     const row1 = Math.floor(firstIndex / gridSize)
     const col1 = firstIndex % gridSize
     const row2 = Math.floor(lastIndex / gridSize)
     const col2 = lastIndex % gridSize
     
-    // Determine if horizontal, vertical, or diagonal
-    let x1, y1, x2, y2
-    const cellSize = 100 / gridSize // percentage per cell
-    const padding = cellSize * 0.1 // padding around cells
+    console.log(`   First: (${row1}, ${col1}), Last: (${row2}, ${col2})`)
     
-    if (row1 === row2) {
-      // Horizontal line
-      x1 = (col1 * cellSize) + padding
-      y1 = (row1 * cellSize) + (cellSize / 2)
-      x2 = ((col2 + 1) * cellSize) - padding
-      y2 = (row2 * cellSize) + (cellSize / 2)
-    } else if (col1 === col2) {
-      // Vertical line
-      x1 = (col1 * cellSize) + (cellSize / 2)
-      y1 = (row1 * cellSize) + padding
-      x2 = (col2 * cellSize) + (cellSize / 2)
-      y2 = ((row2 + 1) * cellSize) - padding
-    } else {
+    // Calculate positions in pixels (we'll use viewBox approach)
+    // The grid has gaps, so we need to account for that
+    const cellWidth = 100 / gridSize // percentage width per cell
+    const gapPercentage = 0.5 // approximate gap between cells
+    
+    let x1, y1, x2, y2
+    
+    if (row1 === row2 && Math.abs(col2 - col1) === gridSize - 1) {
+      // Horizontal line - all in same row
+      x1 = col1 * cellWidth + 5
+      y1 = row1 * cellWidth + cellWidth / 2
+      x2 = (col2 + 1) * cellWidth - 5
+      y2 = row2 * cellWidth + cellWidth / 2
+      console.log('   Horizontal line')
+    } else if (col1 === col2 && Math.abs(row2 - row1) === gridSize - 1) {
+      // Vertical line - all in same column
+      x1 = col1 * cellWidth + cellWidth / 2
+      y1 = row1 * cellWidth + 5
+      x2 = col2 * cellWidth + cellWidth / 2
+      y2 = (row2 + 1) * cellWidth - 5
+      console.log('   Vertical line')
+    } else if (Math.abs(row2 - row1) === gridSize - 1 && Math.abs(col2 - col1) === gridSize - 1) {
       // Diagonal line
-      x1 = (col1 * cellSize) + padding
-      y1 = (row1 * cellSize) + padding
-      x2 = ((col2 + 1) * cellSize) - padding
-      y2 = ((row2 + 1) * cellSize) - padding
+      if (col1 < col2) {
+        // Main diagonal (top-left to bottom-right)
+        x1 = col1 * cellWidth + 5
+        y1 = row1 * cellWidth + 5
+        x2 = (col2 + 1) * cellWidth - 5
+        y2 = (row2 + 1) * cellWidth - 5
+      } else {
+        // Anti-diagonal (top-right to bottom-left)
+        x1 = (col1 + 1) * cellWidth - 5
+        y1 = row1 * cellWidth + 5
+        x2 = col2 * cellWidth + 5
+        y2 = (row2 + 1) * cellWidth - 5
+      }
+      console.log('   Diagonal line')
+    } else {
+      // Fallback: draw line connecting first and last
+      x1 = col1 * cellWidth + cellWidth / 2
+      y1 = row1 * cellWidth + cellWidth / 2
+      x2 = (col2 + 1) * cellWidth - cellWidth / 2
+      y2 = (row2 + 1) * cellWidth - cellWidth / 2
+      console.log('   Fallback line')
     }
+    
+    console.log(`   Line coordinates: (${x1}, ${y1}) to (${x2}, ${y2})`)
     
     return (
       <motion.div
+        key={`strike-${winningIndices.join('-')}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="absolute inset-0 pointer-events-none"
         style={{ zIndex: 20 }}
       >
-        <svg className="w-full h-full" style={{ overflow: 'visible' }}>
+        <svg 
+          className="w-full h-full" 
+          style={{ overflow: 'visible', position: 'absolute', top: 0, left: 0 }}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
           <motion.line
-            x1={`${x1}%`}
-            y1={`${y1}%`}
-            x2={`${x2}%`}
-            y2={`${y2}%`}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
             stroke="#fbbf24"
-            strokeWidth="6"
+            strokeWidth="3"
             strokeLinecap="round"
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            style={{ filter: 'drop-shadow(0 0 4px rgba(251, 191, 36, 0.8))' }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            style={{ 
+              filter: 'drop-shadow(0 0 6px rgba(251, 191, 36, 1))',
+              strokeWidth: '4'
+            }}
           />
         </svg>
       </motion.div>
@@ -274,13 +321,13 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
                     </div>
                   </div>
                   <motion.div
-                    key={scores[player.id] || 0}
+                    key={`score-${player.id}-${scores[player.id] || 0}`}
                     initial={{ scale: 1 }}
-                    animate={scoreAnimation[player.id] ? { scale: [1, 1.3, 1], rotate: [0, 5, -5, 0] } : {}}
-                    transition={{ duration: 0.5 }}
+                    animate={scoreAnimation[player.id] ? { scale: [1, 1.5, 1], rotate: [0, 10, -10, 0] } : { scale: 1 }}
+                    transition={{ duration: 0.6 }}
                     className="text-3xl sm:text-4xl font-bold bg-gradient-to-br from-blue-600 to-purple-600 bg-clip-text text-transparent"
                   >
-                    {scores[player.id] || 0}
+                    {scores[player.id] !== undefined ? scores[player.id] : 0}
                   </motion.div>
                 </div>
               </motion.div>

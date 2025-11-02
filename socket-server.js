@@ -158,23 +158,38 @@ io.on('connection', (socket) => {
     // Check for wins
     const winningLines = checkWin(game.board, game.gridSize, player.symbol, index)
     
-    // Collect all winning cell indices for animation
+    console.log(`\n🔍 Checking win for player ${playerId}, symbol ${player.symbol}, at index ${index}`)
+    console.log(`   Board:`, game.board.map((cell, i) => cell || '.').join(' '))
+    console.log(`   Winning lines found:`, winningLines.length, winningLines)
+    
+    // Collect all winning cell indices for animation (remove duplicates)
     const allWinningIndices = []
+    const uniqueIndices = new Set()
     winningLines.forEach(line => {
-      allWinningIndices.push(...line.indices)
+      line.indices.forEach(idx => {
+        if (!uniqueIndices.has(idx)) {
+          uniqueIndices.add(idx)
+          allWinningIndices.push(idx)
+        }
+      })
     })
     
     if (winningLines.length > 0) {
       // Award point for each winning line
-      game.scores[playerId] = (game.scores[playerId] || 0) + winningLines.length
+      const oldScore = game.scores[playerId] || 0
+      game.scores[playerId] = oldScore + winningLines.length
+      
+      console.log(`\n✅ WIN DETECTED! Player ${playerId} (${player.name}) scored ${winningLines.length} point(s)`)
+      console.log(`   Old score: ${oldScore}, New score: ${game.scores[playerId]}`)
+      console.log(`   Winning indices:`, allWinningIndices)
+      console.log(`   All scores:`, JSON.stringify(game.scores))
       
       // Emit score update with winning indices BEFORE clearing
-      console.log(`Score update: Player ${playerId} scored ${winningLines.length} point(s). New scores:`, game.scores)
       io.to(game.id).emit('scoreUpdate', {
-        scores: game.scores,
+        scores: { ...game.scores }, // Send a copy to ensure it's fresh
         playerId,
         lines: winningLines.map(l => l.type),
-        winningIndices: allWinningIndices, // Send indices for animation
+        winningIndices: [...allWinningIndices], // Send copy of array
       })
       
       // Wait a bit before clearing to allow animation (we'll clear after animation)

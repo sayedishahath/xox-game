@@ -106,8 +106,11 @@ export default function Game() {
     })
 
     newSocket.on('scoreUpdate', (scoreData) => {
-      console.log('Score update received:', scoreData)
-      setScores(scoreData.scores)
+      console.log('📈 Score update received in game.js:', scoreData)
+      if (scoreData.scores) {
+        console.log('   Updating scores:', scoreData.scores)
+        setScores({ ...scoreData.scores }) // Force new object reference
+      }
     })
 
     newSocket.on('disconnect', () => {
