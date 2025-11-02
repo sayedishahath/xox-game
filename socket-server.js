@@ -10,49 +10,54 @@ function createGameId() {
   return `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
-function checkLine(board, gridSize, start, step, symbol) {
-  let count = 0
+function getLineIndices(board, gridSize, start, step, symbol) {
+  const indices = []
   for (let i = 0; i < gridSize; i++) {
     const index = start + step * i
     if (board[index] === symbol) {
-      count++
+      indices.push(index)
     }
   }
-  return count === gridSize
+  // Return indices only if all cells in the line match
+  return indices.length === gridSize ? indices : []
 }
 
 function checkWin(board, gridSize, symbol, lastIndex) {
   const row = Math.floor(lastIndex / gridSize)
   const col = lastIndex % gridSize
-  const lines = []
+  const winningLines = [] // Array of {type, indices}
 
   // Check horizontal
   const horizontalStart = row * gridSize
-  if (checkLine(board, gridSize, horizontalStart, 1, symbol)) {
-    lines.push('horizontal')
+  const horizontalIndices = getLineIndices(board, gridSize, horizontalStart, 1, symbol)
+  if (horizontalIndices.length === gridSize) {
+    winningLines.push({ type: 'horizontal', indices: horizontalIndices })
   }
 
   // Check vertical
   const verticalStart = col
-  if (checkLine(board, gridSize, verticalStart, gridSize, symbol)) {
-    lines.push('vertical')
+  const verticalIndices = getLineIndices(board, gridSize, verticalStart, gridSize, symbol)
+  if (verticalIndices.length === gridSize) {
+    winningLines.push({ type: 'vertical', indices: verticalIndices })
   }
 
   // Check main diagonal (top-left to bottom-right)
   if (row === col) {
-    if (checkLine(board, gridSize, 0, gridSize + 1, symbol)) {
-      lines.push('diagonal-main')
+    const diagonalMainIndices = getLineIndices(board, gridSize, 0, gridSize + 1, symbol)
+    if (diagonalMainIndices.length === gridSize) {
+      winningLines.push({ type: 'diagonal-main', indices: diagonalMainIndices })
     }
   }
 
   // Check anti-diagonal (top-right to bottom-left)
   if (row + col === gridSize - 1) {
-    if (checkLine(board, gridSize, gridSize - 1, gridSize - 1, symbol)) {
-      lines.push('diagonal-anti')
+    const diagonalAntiIndices = getLineIndices(board, gridSize, gridSize - 1, gridSize - 1, symbol)
+    if (diagonalAntiIndices.length === gridSize) {
+      winningLines.push({ type: 'diagonal-anti', indices: diagonalAntiIndices })
     }
   }
 
-  return lines
+  return winningLines
 }
 
 const server = createServer()
@@ -153,54 +158,56 @@ io.on('connection', (socket) => {
     // Check for wins
     const winningLines = checkWin(game.board, game.gridSize, player.symbol, index)
     
+    // Collect all winning cell indices for animation
+    const allWinningIndices = []
+    winningLines.forEach(line => {
+      allWinningIndices.push(...line.indices)
+    })
+    
     if (winningLines.length > 0) {
       // Award point for each winning line
       game.scores[playerId] = (game.scores[playerId] || 0) + winningLines.length
       
-      // Clear the winning lines (set to null)
-      const row = Math.floor(index / game.gridSize)
-      const col = index % game.gridSize
-      
-      if (winningLines.includes('horizontal')) {
-        for (let i = 0; i < game.gridSize; i++) {
-          game.board[row * game.gridSize + i] = null
-        }
-      }
-      if (winningLines.includes('vertical')) {
-        for (let i = 0; i < game.gridSize; i++) {
-          game.board[i * game.gridSize + col] = null
-        }
-      }
-      if (winningLines.includes('diagonal-main')) {
-        for (let i = 0; i < game.gridSize; i++) {
-          game.board[i * game.gridSize + i] = null
-        }
-      }
-      if (winningLines.includes('diagonal-anti')) {
-        for (let i = 0; i < game.gridSize; i++) {
-          game.board[i * game.gridSize + (game.gridSize - 1 - i)] = null
-        }
-      }
-
-      // Emit score update
-      console.log(`Score update: Player ${playerId} scored ${winningLines.length} point(s) for ${winningLines.join(', ')}. New scores:`, game.scores)
+      // Emit score update with winning indices BEFORE clearing
+      console.log(`Score update: Player ${playerId} scored ${winningLines.length} point(s). New scores:`, game.scores)
       io.to(game.id).emit('scoreUpdate', {
         scores: game.scores,
         playerId,
-        lines: winningLines,
+        lines: winningLines.map(l => l.type),
+        winningIndices: allWinningIndices, // Send indices for animation
       })
+      
+      // Wait a bit before clearing to allow animation (we'll clear after animation)
+      // For now, clear immediately but send indices for client-side animation
+      
+      // Clear the winning lines (set to null) after a delay
+      setTimeout(() => {
+        winningLines.forEach(line => {
+          line.indices.forEach(cellIndex => {
+            game.board[cellIndex] = null
+          })
+        })
+        
+        // Emit updated board after clearing
+        io.to(game.id).emit('boardUpdate', {
+          board: game.board,
+        })
+      }, 2000) // 2 seconds for animation
     }
 
     // Switch turn
     game.currentPlayer = game.players.find((p) => p.id !== playerId).id
 
-    // Send updated game state
+    // Send updated game state (but don't clear board yet if there's a win - wait for animation)
+    const boardToSend = winningLines.length > 0 ? [...game.board] : game.board
+    
     io.to(game.id).emit('moveResult', {
       success: true,
-      board: game.board,
+      board: boardToSend,
       currentPlayer: game.currentPlayer,
       status: game.status,
       scores: game.scores, // Include scores in moveResult too
+      winningIndices: allWinningIndices.length > 0 ? allWinningIndices : undefined,
     })
 
     io.to(game.id).emit('gameUpdate', {

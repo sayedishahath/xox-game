@@ -7,6 +7,8 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
   const [gameStatus, setGameStatus] = useState(externalGameStatus || 'waiting')
   const [currentPlayerState, setCurrentPlayerState] = useState(currentPlayer)
   const [scoreAnimation, setScoreAnimation] = useState({})
+  const [winningIndices, setWinningIndices] = useState([])
+  const [strikedCells, setStrikedCells] = useState(new Set())
 
   // Update game status when prop changes
   useEffect(() => {
@@ -43,10 +45,23 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
         setCurrentPlayerState(result.currentPlayer)
         setGameStatus(result.status)
         // Note: Scores are updated via props from parent (game.js)
+        
+        // Handle winning line animation
+        if (result.winningIndices && result.winningIndices.length > 0) {
+          setWinningIndices(result.winningIndices)
+          setStrikedCells(new Set(result.winningIndices))
+          
+          // Clear strike animation after 2 seconds
+          setTimeout(() => {
+            setWinningIndices([])
+            setStrikedCells(new Set())
+          }, 2000)
+        }
       }
     })
 
     socket.on('scoreUpdate', (scoreData) => {
+      console.log('Score update in GameBoard:', scoreData)
       // Trigger score animation
       if (scoreData.playerId) {
         setScoreAnimation({
@@ -56,6 +71,25 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
           setScoreAnimation(prev => ({ ...prev, [scoreData.playerId]: false }))
         }, 1000)
       }
+      
+      // Handle winning line animation
+      if (scoreData.winningIndices && scoreData.winningIndices.length > 0) {
+        setWinningIndices(scoreData.winningIndices)
+        setStrikedCells(new Set(scoreData.winningIndices))
+        
+        // Clear strike animation after 2 seconds
+        setTimeout(() => {
+          setWinningIndices([])
+          setStrikedCells(new Set())
+        }, 2000)
+      }
+    })
+    
+    socket.on('boardUpdate', (data) => {
+      // Board was cleared after animation
+      setBoard(data.board)
+      setWinningIndices([])
+      setStrikedCells(new Set())
     })
 
     socket.on('playerLeft', (data) => {
@@ -83,6 +117,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       socket.off('playerLeft')
       socket.off('playerJoined')
       socket.off('gameUpdate')
+      socket.off('boardUpdate')
     }
   }, [socket])
 
@@ -95,10 +130,86 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
 
   const getCellColor = (cell, index) => {
     if (!cell) return 'bg-white hover:bg-gray-50'
+    
+    const isStriked = strikedCells.has(index)
+    const isWinning = winningIndices.includes(index)
+    
     if (cell === yourSymbol) {
-      return 'bg-gradient-to-br from-blue-100 to-blue-200 border-blue-400'
+      // Your symbol (X) - red
+      if (isWinning) {
+        return 'bg-gradient-to-br from-red-300 to-red-400 border-red-500 ring-4 ring-yellow-400'
+      }
+      return 'bg-gradient-to-br from-red-100 to-red-200 border-red-400'
+    } else {
+      // Opponent's symbol (O) - green
+      if (isWinning) {
+        return 'bg-gradient-to-br from-green-300 to-green-400 border-green-500 ring-4 ring-yellow-400'
+      }
+      return 'bg-gradient-to-br from-green-100 to-green-200 border-green-400'
     }
-    return 'bg-gradient-to-br from-red-100 to-red-200 border-red-400'
+  }
+  
+  const getStrikeOverlay = () => {
+    if (winningIndices.length === 0) return null
+    
+    // Group indices by row/col to determine line type
+    const firstIndex = winningIndices[0]
+    const lastIndex = winningIndices[winningIndices.length - 1]
+    const row1 = Math.floor(firstIndex / gridSize)
+    const col1 = firstIndex % gridSize
+    const row2 = Math.floor(lastIndex / gridSize)
+    const col2 = lastIndex % gridSize
+    
+    // Determine if horizontal, vertical, or diagonal
+    let x1, y1, x2, y2
+    const cellSize = 100 / gridSize // percentage per cell
+    const padding = cellSize * 0.1 // padding around cells
+    
+    if (row1 === row2) {
+      // Horizontal line
+      x1 = (col1 * cellSize) + padding
+      y1 = (row1 * cellSize) + (cellSize / 2)
+      x2 = ((col2 + 1) * cellSize) - padding
+      y2 = (row2 * cellSize) + (cellSize / 2)
+    } else if (col1 === col2) {
+      // Vertical line
+      x1 = (col1 * cellSize) + (cellSize / 2)
+      y1 = (row1 * cellSize) + padding
+      x2 = (col2 * cellSize) + (cellSize / 2)
+      y2 = ((row2 + 1) * cellSize) - padding
+    } else {
+      // Diagonal line
+      x1 = (col1 * cellSize) + padding
+      y1 = (row1 * cellSize) + padding
+      x2 = ((col2 + 1) * cellSize) - padding
+      y2 = ((row2 + 1) * cellSize) - padding
+    }
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 20 }}
+      >
+        <svg className="w-full h-full" style={{ overflow: 'visible' }}>
+          <motion.line
+            x1={`${x1}%`}
+            y1={`${y1}%`}
+            x2={`${x2}%`}
+            y2={`${y2}%`}
+            stroke="#fbbf24"
+            strokeWidth="6"
+            strokeLinecap="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            style={{ filter: 'drop-shadow(0 0 4px rgba(251, 191, 36, 0.8))' }}
+          />
+        </svg>
+      </motion.div>
+    )
   }
 
   const cellVariants = {
@@ -226,7 +337,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
       {/* Game Board */}
       <div className="flex justify-center overflow-x-auto pb-2">
         <div
-          className="grid gap-1.5 sm:gap-2 md:gap-3 p-2 sm:p-3 md:p-4 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl sm:rounded-2xl shadow-2xl"
+          className="grid gap-1.5 sm:gap-2 md:gap-3 p-2 sm:p-3 md:p-4 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl sm:rounded-2xl shadow-2xl relative"
           style={{
             gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))`,
             maxWidth: '100%',
@@ -234,13 +345,15 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
             minWidth: gridSize > 6 ? '400px' : 'auto',
           }}
         >
+          {/* Strike line overlay */}
+          {getStrikeOverlay()}
           <AnimatePresence>
             {board.map((cell, index) => (
               <motion.button
                 key={index}
                 variants={cellVariants}
                 initial="initial"
-                animate="animate"
+                animate={winningIndices.includes(index) ? { scale: [1, 1.2, 1] } : "animate"}
                 whileHover={
                   !cell && currentPlayerState === playerId && gameStatus === 'playing'
                     ? { scale: 1.1, rotate: 2 }
@@ -260,6 +373,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
                   text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold
                   transition-all duration-200
                   min-w-[40px] sm:min-w-[50px] md:min-w-[60px]
+                  relative
                   ${!cell && currentPlayerState === playerId && gameStatus === 'playing'
                     ? 'cursor-pointer border-blue-300 shadow-lg hover:shadow-xl active:scale-95'
                     : 'cursor-not-allowed opacity-75 border-gray-300'
@@ -269,9 +383,17 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
                 {cell && (
                   <motion.span
                     initial={{ scale: 0, rotate: -180 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    className={cell === yourSymbol ? 'text-blue-600' : 'text-red-600'}
+                    animate={winningIndices.includes(index) ? { 
+                      scale: [1, 1.3, 1], 
+                      rotate: [0, 360],
+                      filter: ["brightness(1)", "brightness(1.5)", "brightness(1)"]
+                    } : { scale: 1, rotate: 0 }}
+                    transition={{ 
+                      type: winningIndices.includes(index) ? "spring" : "spring",
+                      stiffness: 300, 
+                      damping: 20 
+                    }}
+                    className={cell === 'X' ? 'text-red-600' : 'text-green-600'}
                   >
                     {cell}
                   </motion.span>
