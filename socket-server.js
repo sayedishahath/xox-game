@@ -14,12 +14,19 @@ function getLineIndices(board, gridSize, start, step, symbol) {
   const indices = []
   for (let i = 0; i < gridSize; i++) {
     const index = start + step * i
-    if (board[index] === symbol) {
-      indices.push(index)
+    // Make sure index is within bounds
+    if (index >= 0 && index < board.length) {
+      if (board[index] === symbol) {
+        indices.push(index)
+      } else {
+        // If any cell doesn't match, we can't have a complete line
+        // But we continue to check all cells for debugging
+      }
     }
   }
   // Return indices only if all cells in the line match
-  return indices.length === gridSize ? indices : []
+  const isComplete = indices.length === gridSize
+  return isComplete ? indices : []
 }
 
 function checkWin(board, gridSize, symbol, lastIndex) {
@@ -27,36 +34,59 @@ function checkWin(board, gridSize, symbol, lastIndex) {
   const col = lastIndex % gridSize
   const winningLines = [] // Array of {type, indices}
 
-  // Check horizontal
+  console.log(`\n🔎 Checking win for symbol '${symbol}' at position (${row}, ${col}) = index ${lastIndex}`)
+
+  // Check horizontal - check the row containing the last move
   const horizontalStart = row * gridSize
   const horizontalIndices = getLineIndices(board, gridSize, horizontalStart, 1, symbol)
+  console.log(`   Horizontal row ${row}: checking indices ${horizontalStart} to ${horizontalStart + gridSize - 1}`)
+  console.log(`   Horizontal indices found:`, horizontalIndices)
   if (horizontalIndices.length === gridSize) {
+    console.log(`   ✅ HORIZONTAL WIN detected in row ${row}`)
     winningLines.push({ type: 'horizontal', indices: horizontalIndices })
   }
 
-  // Check vertical
+  // Check vertical - check the column containing the last move
   const verticalStart = col
   const verticalIndices = getLineIndices(board, gridSize, verticalStart, gridSize, symbol)
+  console.log(`   Vertical col ${col}: checking indices`, Array.from({ length: gridSize }, (_, i) => verticalStart + i * gridSize))
+  console.log(`   Vertical indices found:`, verticalIndices)
   if (verticalIndices.length === gridSize) {
+    console.log(`   ✅ VERTICAL WIN detected in column ${col}`)
     winningLines.push({ type: 'vertical', indices: verticalIndices })
   }
 
-  // Check main diagonal (top-left to bottom-right)
+  // Check main diagonal (top-left to bottom-right) - only if last move is on this diagonal
   if (row === col) {
-    const diagonalMainIndices = getLineIndices(board, gridSize, 0, gridSize + 1, symbol)
+    const diagonalMainStart = 0
+    const diagonalMainStep = gridSize + 1
+    const diagonalMainIndices = getLineIndices(board, gridSize, diagonalMainStart, diagonalMainStep, symbol)
+    console.log(`   Main diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalMainStart + i * diagonalMainStep))
+    console.log(`   Main diagonal indices found:`, diagonalMainIndices)
     if (diagonalMainIndices.length === gridSize) {
+      console.log(`   ✅ MAIN DIAGONAL WIN detected`)
       winningLines.push({ type: 'diagonal-main', indices: diagonalMainIndices })
     }
+  } else {
+    console.log(`   Main diagonal: skipped (row ${row} !== col ${col})`)
   }
 
-  // Check anti-diagonal (top-right to bottom-left)
+  // Check anti-diagonal (top-right to bottom-left) - only if last move is on this diagonal
   if (row + col === gridSize - 1) {
-    const diagonalAntiIndices = getLineIndices(board, gridSize, gridSize - 1, gridSize - 1, symbol)
+    const diagonalAntiStart = gridSize - 1
+    const diagonalAntiStep = gridSize - 1
+    const diagonalAntiIndices = getLineIndices(board, gridSize, diagonalAntiStart, diagonalAntiStep, symbol)
+    console.log(`   Anti-diagonal: checking indices`, Array.from({ length: gridSize }, (_, i) => diagonalAntiStart + i * diagonalAntiStep))
+    console.log(`   Anti-diagonal indices found:`, diagonalAntiIndices)
     if (diagonalAntiIndices.length === gridSize) {
+      console.log(`   ✅ ANTI-DIAGONAL WIN detected`)
       winningLines.push({ type: 'diagonal-anti', indices: diagonalAntiIndices })
     }
+  } else {
+    console.log(`   Anti-diagonal: skipped (row ${row} + col ${col} = ${row + col} !== ${gridSize - 1})`)
   }
 
+  console.log(`   Total winning lines found: ${winningLines.length}`)
   return winningLines
 }
 
@@ -216,19 +246,21 @@ io.on('connection', (socket) => {
     // Send updated game state (but don't clear board yet if there's a win - wait for animation)
     const boardToSend = winningLines.length > 0 ? [...game.board] : game.board
     
+    console.log(`\n📤 Emitting moveResult with scores:`, JSON.stringify(game.scores))
     io.to(game.id).emit('moveResult', {
       success: true,
       board: boardToSend,
       currentPlayer: game.currentPlayer,
       status: game.status,
-      scores: game.scores, // Include scores in moveResult too
+      scores: { ...game.scores }, // Include scores in moveResult too (force copy)
       winningIndices: allWinningIndices.length > 0 ? allWinningIndices : undefined,
     })
 
+    console.log(`📤 Emitting gameUpdate with scores:`, JSON.stringify(game.scores))
     io.to(game.id).emit('gameUpdate', {
       players: game.players,
       currentPlayer: game.currentPlayer,
-      scores: game.scores,
+      scores: { ...game.scores }, // Force copy to ensure fresh data
       status: game.status,
     })
 

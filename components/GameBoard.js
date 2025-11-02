@@ -41,6 +41,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
 
     socket.on('moveResult', (result) => {
       if (result.success) {
+        console.log('📋 Move result received in GameBoard:', result)
         setBoard(result.board)
         setCurrentPlayerState(result.currentPlayer)
         setGameStatus(result.status)
@@ -48,6 +49,7 @@ export default function GameBoard({ gridSize, playerId, socket, currentPlayer, p
         
         // Handle winning line animation
         if (result.winningIndices && result.winningIndices.length > 0) {
+          console.log('🎯 Winning indices in moveResult:', result.winningIndices)
           setWinningIndices(result.winningIndices)
           setStrikedCells(new Set(result.winningIndices))
           

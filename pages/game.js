@@ -92,17 +92,26 @@ export default function Game() {
     })
 
     newSocket.on('gameUpdate', (gameData) => {
-      console.log('Game update received:', gameData)
+      console.log('🔄 Game update received in game.js:', gameData)
       setPlayers(gameData.players)
       setCurrentPlayer(gameData.currentPlayer)
       if (gameData.scores) {
-        setScores(gameData.scores)
+        console.log('   Updating scores from gameUpdate:', gameData.scores)
+        setScores({ ...gameData.scores }) // Force new object reference
       }
       setGameStatus(gameData.status || 'waiting')
     })
 
     newSocket.on('gameState', (gameData) => {
       setGameStatus(gameData.status || 'waiting')
+    })
+
+    // Listen to moveResult for scores (it also includes scores)
+    newSocket.on('moveResult', (result) => {
+      if (result.success && result.scores) {
+        console.log('📋 Move result received in game.js with scores:', result.scores)
+        setScores({ ...result.scores })
+      }
     })
 
     newSocket.on('scoreUpdate', (scoreData) => {
@@ -214,6 +223,10 @@ export default function Game() {
                 scores={scores}
                 gameStatus={gameStatus}
               />
+              {/* Debug: Show scores state */}
+              <div className="mt-4 text-center text-white text-xs bg-black/30 p-2 rounded">
+                Debug Scores: {JSON.stringify(scores)}
+              </div>
             </motion.div>
           ) : (
             <motion.div
