@@ -14,6 +14,7 @@ export default function Game() {
   const [scores, setScores] = useState({})
   const [gridSize, setGridSize] = useState(3)
   const [isConnecting, setIsConnecting] = useState(true)
+  const [connectionError, setConnectionError] = useState(null)
 
   useEffect(() => {
     if (!size || !player) return
@@ -23,21 +24,62 @@ export default function Game() {
   useEffect(() => {
     if (!size || !player) return
 
+    // Use environment variable for Socket.io server URL
+    // For production, set NEXT_PUBLIC_SOCKET_URL in Vercel environment variables
+    // Example: https://your-socket-server.railway.app or https://your-socket-server.render.com
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 
-      (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
+      (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '')
+    
+    if (!socketUrl) {
+      console.error('Socket URL not configured. Please set NEXT_PUBLIC_SOCKET_URL environment variable.')
+      setConnectionError('Socket server URL not configured. Please set NEXT_PUBLIC_SOCKET_URL environment variable.')
+      setIsConnecting(false)
+      return
+    }
     
     const newSocket = io(socketUrl, {
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 20000,
     })
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
       setPlayerId(newSocket.id)
       setIsConnecting(false)
+      setConnectionError(null)
       newSocket.emit('joinGame', {
         playerName: player,
         gridSize: parseInt(size),
       })
+    })
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Connection error:', error)
+      setIsConnecting(false)
+      setConnectionError('Failed to connect to game server. Please check your connection and try again.')
+    })
+
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log('Reconnected after', attemptNumber, 'attempts')
+      setIsConnecting(false)
+      setConnectionError(null)
+    })
+
+    newSocket.on('reconnect_error', (error) => {
+      console.error('Reconnection error:', error)
+      setIsConnecting(true)
+      setConnectionError('Trying to reconnect...')
+    })
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('Failed to reconnect to server')
+      setIsConnecting(false)
+      setConnectionError('Failed to reconnect to game server. Please refresh the page.')
     })
 
     newSocket.on('playerJoined', (gameData) => {
@@ -116,7 +158,31 @@ export default function Game() {
 
         {/* Game Board */}
         <AnimatePresence mode="wait">
-          {socket && !isConnecting ? (
+          {connectionError ? (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex flex-col items-center justify-center min-h-[400px] bg-white/10 backdrop-blur-sm rounded-2xl p-8"
+            >
+              <div className="text-red-200 text-center mb-4">
+                <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-xl font-bold mb-2">Connection Error</p>
+                <p className="text-base">{connectionError}</p>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => window.location.reload()}
+                className="bg-white text-gray-800 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-colors"
+              >
+                Refresh Page
+              </motion.button>
+            </motion.div>
+          ) : socket && !isConnecting ? (
             <motion.div
               key="game"
               initial={{ opacity: 0, scale: 0.95 }}

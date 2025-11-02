@@ -1,0 +1,17 @@
+{
+  "name": "xox-game-socket-server",
+  "version": "1.0.0",
+  "description": "Socket.io server for XOX Multiplayer Game",
+  "main": "socket-server.js",
+  "scripts": {
+    "start": "node socket-server.js",
+    "dev": "node socket-server.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.5.4"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
+
